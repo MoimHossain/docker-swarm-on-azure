@@ -15,9 +15,15 @@ This resource manager template will provision the following resources:
 
 Hope you find it ineteresting!
 
-<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fazure%2Fazure-quickstart-templates%2Fmaster%2F201-vmss-lapstack-autoscale%2Fazuredeploy.json" target="_blank">
+<a href="https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMoimHossain%2Fdocker-swarm-on-azure%2Fmaster%2Fswarm-managers%2Fazuredeploy.json" target="_blank">
     <img src="http://azuredeploy.net/deploybutton.png"/>
 </a>
-<a href="http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Fazure-quickstart-templates%2Fmaster%2F201-vmss-lapstack-autoscale%2Fazuredeploy.json" target="_blank">
+<a href="http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FMoimHossain%2Fdocker-swarm-on-azure%2Fmaster%2Fswarm-managers%2Fazuredeploy.json" target="_blank">
     <img src="http://armviz.io/visualizebutton.png"/>
 </a>
+
+
+### Powershell deployment
+
+I have a handly powershell script (`Go.ps1`) too, which can be used to automate the entire cluster deployment - that can be launched via a automated workflow process (CI/CD for example).
+
