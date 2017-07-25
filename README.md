@@ -25,5 +25,5 @@ Hope you find it ineteresting!
 
 ### Powershell deployment
 
-I have a handly powershell script (`Go.ps1`) too, which can be used to automate the entire cluster deployment - that can be launched via a automated workflow process (CI/CD for example).
+I have a handy powershell script into the repo (`Go.ps1`) too, which can be used to automate the entire cluster deployment - i.e. can be launched via a automated workflow process (CI/CD for example).
 
