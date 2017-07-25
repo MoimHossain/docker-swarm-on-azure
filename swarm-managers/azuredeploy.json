@@ -1,0 +1,504 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "adminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "Admin username"
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Admin password"
+      }
+    },
+    "dnsNameforLBIP": {
+      "type": "string",
+      "defaultValue": "dsdnsnamelb",
+      "metadata": {
+        "description": "Unique DNS name"
+      }
+    },
+    "vmNamePrefix": {
+      "type": "string",
+      "defaultValue": "swarm-manager",
+      "metadata": {
+        "description": "VM name prefix"
+      }
+    },
+    "lbName": {
+      "type": "string",
+      "defaultValue": "swarmLoadBalancer",
+      "metadata": {
+        "description": "Load Balancer name"
+      }
+    },
+    "nicNamePrefix": {
+      "type": "string",
+      "defaultValue": "managerNic",
+      "metadata": {
+        "description": "Network Interface Name Prefix"
+      }
+    },
+    "publicIPAddressName": {
+      "type": "string",
+      "defaultValue": "swarmPublicIP",
+      "metadata": {
+        "description": "Public IP Address Name"
+      }
+    },
+    "vnetName": {
+      "type": "string",
+      "defaultValue": "ibitSwarmVNET",
+      "metadata": {
+        "description": "VNET name"
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_A1",
+      "allowedValues": [
+        "Standard_A0",
+        "Standard_A1",
+        "Standard_A2",
+        "Standard_A3",
+        "Standard_A4"
+      ],
+      "metadata": {
+        "description": "VM Size"
+      }
+    }
+  },
+  "variables": {
+    "imagePublisher": "Canonical",
+    "imageOffer": "UbuntuServer",
+    "imageSku": "14.04.5-LTS",
+    "storageAccountType": "Standard_LRS",
+    "availabilitySetName": "dsSwarmAVSet",
+    "addressPrefix": "10.0.0.0/16",
+    "subnetName": "swarmSubNet",
+    "subnetPrefix": "10.0.0.0/24",
+    "publicIPAddressType": "Dynamic",
+    "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',parameters('vnetName'))]",
+    "subnetRef": "[concat(variables('vnetID'),'/subnets/',variables ('subnetName'))]",
+    "publicIPAddressID": "[resourceId('Microsoft.Network/publicIPAddresses',parameters('publicIPAddressName'))]",
+    "lbID": "[resourceId('Microsoft.Network/loadBalancers',parameters('lbName'))]",
+    "numberOfMasterNodes": 2,
+    "numberOfWorkerNodes": 3,
+    "frontEndIPConfigID": "[concat(variables('lbID'),'/frontendIPConfigurations/loadBalancerFrontend')]",
+    "storageAccountName": "dsswarmmanagerstorage" /*uniqueString(resourceGroup().id)*/
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('storageAccountName')]",
+      "apiVersion": "2015-05-01-preview",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "accountType": "[variables('storageAccountType')]"
+      }
+    },
+    {
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "[variables('availabilitySetName')]",
+      "apiVersion": "2016-04-30-preview",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "platformFaultDomainCount": 2,
+        "platformUpdateDomainCount": 2,
+        "managed": true
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[parameters('publicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "publicIPAllocationMethod": "[variables('publicIPAddressType')]",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('dnsNameforLBIP')]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[parameters('vnetName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('addressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('subnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('subnetPrefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(parameters('nicNamePrefix'), copyindex())]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "nicLoop",
+        "count": "[variables('numberOfMasterNodes')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/virtualNetworks/', parameters('vnetName'))]",
+        "[concat('Microsoft.Network/loadBalancers/', parameters('lbName'))]",
+        "[concat('Microsoft.Network/loadBalancers/', parameters('lbName'), '/inboundNatRules/', 'SSH-VM', copyIndex())]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('subnetRef')]"
+              },
+              "loadBalancerBackendAddressPools": [
+                {
+                  "id": "[concat(variables('lbID'), '/backendAddressPools/LoadBalancerBackend')]"
+                }
+              ],
+              "loadBalancerInboundNatRules": [
+                {
+                  "id": "[concat(variables('lbID'),'/inboundNatRules/SSH-VM', copyindex())]"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "name": "[parameters('lbName')]",
+      "type": "Microsoft.Network/loadBalancers",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Network/publicIPAddresses/', parameters('publicIPAddressName'))]"
+      ],
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "LoadBalancerFrontend",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[variables('publicIPAddressID')]"
+              }
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "LoadBalancerBackend"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/loadBalancers/inboundNatRules",
+      "name": "[concat(parameters('lbName'), '/', 'SSH-VM', copyIndex())]",
+      "location": "[resourceGroup().location]",
+      "copy": {
+        "name": "lbNatLoop",
+        "count": "[variables('numberOfMasterNodes')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/loadBalancers/', parameters('lbName'))]"
+      ],
+      "properties": {
+        "frontendIPConfiguration": {
+          "id": "[variables('frontEndIPConfigID')]"
+        },
+        "protocol": "tcp",
+        "frontendPort": "[copyIndex(5000)]",
+        "backendPort": 22,
+        "enableFloatingIP": false
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '/install-docker')]",
+      "copy": {
+        "name": "install-docker-loop",
+        "count": "[variables('numberOfMasterNodes')]"
+      },
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', concat(parameters('vmNamePrefix'), copyindex()))]"
+      ],
+      "tags": {
+        "displayName": "install-docker"
+      },
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "DockerExtension",
+        "typeHandlerVersion": "1.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "docker": {
+            "port": "2375"
+          }
+        }
+      }
+    },
+
+
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(parameters('vmNamePrefix'), copyindex(), '/swarm-init')]",
+      "copy": {
+        "name": "swarm-init-loop",
+        "count": "[variables('numberOfMasterNodes')]"
+      },
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "install-docker-loop"
+      ],
+      "tags": {
+        "displayName": "swarm-init-extensions"
+      },
+      "properties": {
+        "publisher": "Microsoft.Azure.Extensions",
+        "type": "CustomScript",
+        "typeHandlerVersion": "2.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "fileUris": [
+            "https://gist.githubusercontent.com/MoimHossain/8f2c8bed15e153629a024f93dc1873ca/raw/81ad9f411b41d0e2a5345169df5ac7f77c44be30/config-swarm-manager.sh"
+          ],
+          "commandToExecute": "[concat('sudo sh config-swarm-manager.sh ', copyindex(), ' ', reference(concat(parameters('nicNamePrefix'), 0)).ipConfigurations[0].properties.privateIPAddress, ' ', reference(concat(parameters('nicNamePrefix'), copyIndex())).ipConfigurations[0].properties.privateIPAddress, ' ', parameters('adminUsername'), ' ', parameters('adminPassword'))]"
+        }
+      }
+    },
+
+
+
+    {
+      "apiVersion": "2016-04-30-preview",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(parameters('vmNamePrefix'), copyindex())]",
+      "copy": {
+        "name": "virtualMachineLoop",
+        "count": "[variables('numberOfMasterNodes')]"
+      },
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+        "[concat('Microsoft.Network/networkInterfaces/', parameters('nicNamePrefix'), copyindex())]",
+        "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
+      ],
+      "properties": {
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets',variables('availabilitySetName'))]"
+        },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(parameters('vmNamePrefix'), copyIndex())]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('imagePublisher')]",
+            "offer": "[variables('imageOffer')]",
+            "sku": "[variables('imageSku')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(parameters('nicNamePrefix'),copyindex()))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": {
+            "enabled": "true",
+            "storageUri": "[concat('http://',variables('storageAccountName'),'.blob.core.windows.net')]"
+          }
+        }
+      }
+    },
+    /*Scale set provisioning */
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "swarm-worker-publicIP",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-04-01",
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[toLower(concat('swarmworkerdns', 'dsworkerdns'))]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/loadBalancers",
+      "name": "swarm-worker-lb",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-04-01",
+      "dependsOn": [
+        "[concat('Microsoft.Network/publicIPAddresses/', 'swarm-worker-publicIP')]"
+      ],
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "LoadBalancerFrontEnd",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'swarm-worker-publicIP')]"
+              }
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "swarm-worker-backendaddress-pool"
+          }
+        ],
+        "inboundNatPools": [
+          {
+            "name": "swarm-worker-nat-pool",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'swarm-worker-lb'),'/frontendIPConfigurations/loadBalancerFrontEnd')]"
+              },
+              "protocol": "tcp",
+              "frontendPortRangeStart": 50000,
+              "frontendPortRangeEnd": 50119,
+              "backendPort": 22
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "name": "swarm-workers",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2017-03-30",
+      "dependsOn": [
+        "[concat('Microsoft.Network/loadBalancers/', 'swarm-worker-lb')]",
+        "swarm-init-loop"
+      ],
+      "sku": {
+        "name": "[parameters('vmSize')]",
+        "tier": "Standard",
+        "capacity": "[variables('numberOfWorkerNodes')]"
+      },
+      "properties": {
+        "overprovision": "true",
+        "upgradePolicy": {
+          "mode": "Manual"
+        },
+        "virtualMachineProfile": {
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "caching": "ReadWrite"
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "UbuntuServer",
+              "sku": "16.04-LTS",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerNamePrefix": "swarm-worker",
+            "adminUsername": "[parameters('adminUsername')]",
+            "adminPassword": "[parameters('adminPassword')]"
+          },
+          "networkProfile": {
+            "networkInterfaceConfigurations": [
+              {
+                "name": "swarm-worker-nic",
+                "properties": {
+                  "primary": true,
+                  "ipConfigurations": [
+                    {
+                      "name": "swarm-worker-ipconfig",
+                      "properties": {
+                        "subnet": {
+                          "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/virtualNetworks/', parameters('vnetName'), '/subnets/', variables('subnetName'))]"
+                        },
+                        "loadBalancerBackendAddressPools": [
+                          {
+                            "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', 'swarm-worker-lb', '/backendAddressPools/swarm-worker-backendaddress-pool')]"
+                          }
+                        ],
+                        "loadBalancerInboundNatPools": [
+                          {
+                            "id": "[concat('/subscriptions/', subscription().subscriptionId,'/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', 'swarm-worker-lb', '/inboundNatPools/swarm-worker-nat-pool')]"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "extensionProfile": {
+            "extensions": [
+              {
+                "name": "Docker",
+                "properties": {
+                  "publisher": "Microsoft.Azure.Extensions",
+                  "type": "DockerExtension",
+                  "typeHandlerVersion": "1.0",
+                  "autoUpgradeMinorVersion": true,
+                  "settings": {
+                    "docker": {
+                      "port": "2375"
+                    }
+                  }
+                }
+              },
+
+
+              {
+                "name": "ConfigSwarmWorker",
+                "properties": {
+                  "publisher": "Microsoft.Azure.Extensions",
+                  "type": "CustomScript",
+                  "typeHandlerVersion": "2.0",
+                  "autoUpgradeMinorVersion": true,
+                  "settings": {
+                    "fileUris": [                      
+                      "https://gist.githubusercontent.com/MoimHossain/6ecb8f4b62c295f0902337a34b83d306/raw/28be6d6a06fd7830ccebcb81aa986ba8749ab5c5/swarm-join-worker.sh"
+                    ],
+                    "commandToExecute": "[concat('sudo sh swarm-join-worker.sh ', reference(concat(parameters('nicNamePrefix'), 0)).ipConfigurations[0].properties.privateIPAddress, ' ', parameters('adminUsername'), ' ', parameters('adminPassword'))]"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
