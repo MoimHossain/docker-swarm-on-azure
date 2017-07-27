@@ -27,3 +27,8 @@ Hope you find it ineteresting!
 
 I have a handy powershell script into the repo (`Go.ps1`) too, which can be used to automate the entire cluster deployment - i.e. can be launched via a automated workflow process (CI/CD for example).
 
+### Explanations
+I wrote a blog post to describe little details of the template, you can [read it here](http://moimtechview.blogspot.nl/2017/07/docker-swarm-mode-cluster-via-arm.html).
+
+#### Thanks for reading. Cheers!
+
